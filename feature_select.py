@@ -29,7 +29,6 @@ def figure_object(pos_data,nag_data,li):
     plt.xlabel("the figure of %s"%li)
     plt.show()
 
-
 def Missing_stat(pos_data,nag_data):
     """统计各列的缺失值"""
     columns=pos_data.columns
@@ -46,7 +45,7 @@ def Missing_stat(pos_data,nag_data):
     return miss_above_half_index
 
 def load_data():
-    """read data"""
+    """read data 两张表分别处理"""
     root="F:/projectfile/yibao_yishi_data/yibao_Feature_Engineering/data/"
     pos_data=pd.read_csv(os.path.join(root,"outlier/mzsf.csv"),encoding="cp936")
     nag_data=pd.read_csv(os.path.join(root,"random_5K/mzsf_5k.csv"),encoding="cp936")
@@ -81,6 +80,73 @@ def load_data():
     pos_data.to_csv(os.path.join(root,"pos_data.csv"),index=False)
     nag_data.to_csv(os.path.join(root,"nag_data.csv"),index=False)
 
+def load_data_combine():
+    """把两张表合起来进行处理"""
+    root = "F:/projectfile/yibao_yishi_data/yibao_Feature_Engineering/data/"
+    pos_data = pd.read_csv(os.path.join(root, "outlier/mzsf.csv"), encoding="cp936")
+    nag_data = pd.read_csv(os.path.join(root, "random_5K/mzsf_5k.csv"), encoding="cp936")
+    del pos_data['XMING1']
+    pos_data["label"]=pd.Series(1,index=pos_data.index)
+    nag_data['label']=pd.Series(0,index=pos_data.index)
+
+    print(pos_data.shape)
+    print(nag_data.shape)
+    #print(pos_data['label'].dtypes)
+
+    combine_data=pd.DataFrame(pd.concat([pos_data,nag_data],axis=0,ignore_index=True))
+    print(combine_data.shape)
+
+    miss_above_half_index=Missing_stat(pos_data,nag_data)
+    """去除缺失值超过一半的列"""
+    for li in miss_above_half_index:
+        del combine_data[li]
+
+    """处理缺失值"""
+    combine_data=combine_data.dropna()
+    print("combine_data.dropna:",combine_data.shape)
+    #print("the number of columns",len(combine_data.columns))
+
+    """转换数据类型"""
+    combine_data_str=[]
+    for li in combine_data.columns:
+        if combine_data[li].dtypes=="int64":
+            combine_data[li]=combine_data[li].astype(str)
+
+    """去除一些没有用的列信息"""
+    delect_index = ["GRID00","DJLSH0","MZLSH0","DWID01", "GHKSMC", "FWWDBH", "SJSFRQ", "SJSFSJ", "SFRQ00", "SFSJ00", "BQZDMS","QSRQ00"]
+    for li in delect_index:
+        del combine_data[li]
+
+    print(pos_data.shape)
+    print(nag_data.shape)
+
+    columns_index=[]
+    for li in combine_data.columns:
+        if combine_data[li].dtypes!='float64':
+            content = list(set(list((combine_data[li]))))
+            length=len(content)
+            if length>=2 and length<=2000:
+                print(combine_data[li].dtypes, li,len(content),content)
+                columns_index.append(li)
+
+    print("columns_index:", columns_index)
+    print("the number of columns_index:", len(columns_index))
+
+    """将处理好的columns_index和float64进行分析"""
+    index=[]
+    for li in combine_data.columns:
+        type=combine_data[li].dtypes
+        if type=='float64' or li in columns_index:
+            index.append(li)
+    #index.append("label")
+
+    print("index:",index)
+    print("the number of index:", len(index))
+    combine_data=combine_data.ix[:,index]
+
+    """将清洗后的数据存入文件"""
+    combine_data.to_csv(os.path.join(root,"combine_data.csv"),index=False)
+
 
 def machion_learning():
     """利用机器学习算法来进行处理"""
@@ -90,24 +156,45 @@ def machion_learning():
     from sklearn.model_selection import train_test_split
 
     root="F:/projectfile/yibao_yishi_data/yibao_Feature_Engineering/data/"
-    pos_data=pd.read_csv(os.path.join(root,"pos_data.csv"),encoding="cp936")
-    nag_data=pd.read_csv(os.path.join(root,"nag_data.csv"),encoding="cp936")
-    print("pos_data:", pos_data.shape)
-    print("nag_data:", nag_data.shape)
-    print(pos_data.GHKSMC.dtypes)
-    index=[]
-    for li in pos_data.columns:
-        if pos_data[li].dtypes=="float64":
-            index.append(li)
-        else:
-            figure_object(pos_data[li],nag_data[li],li)
+    def load(root=root):
+        pos_data=pd.read_csv(os.path.join(root,"pos_data.csv"),encoding="cp936")
+        nag_data=pd.read_csv(os.path.join(root,"nag_data.csv"),encoding="cp936")
+        print("pos_data:", pos_data.shape)
+        print("nag_data:", nag_data.shape)
+        print(pos_data.GHKSMC.dtypes)
+        index=[]
+        for li in pos_data.columns:
+            if pos_data[li].dtypes=="float64":
+                index.append(li)
+            # else:
+            #     figure_object(pos_data[li],nag_data[li],li)
 
+        print("the count of index:",len(index))
+        x=np.vstack((pos_data.ix[:,index].values,nag_data.ix[:,index].values))
+        y=list(np.ones(pos_data.shape[0]))+list(np.zeros(nag_data.shape[0]))
+        return x,y
 
-    print("the count of index:",len(index))
-    x=np.vstack((pos_data.ix[:,index].values,nag_data.ix[:,index].values))
-    y=list(np.ones(pos_data.shape[0]))+list(np.zeros(nag_data.shape[0]))
+    def load_combine(root=root):
+        combine_data = pd.read_csv(os.path.join(root, "combine_data.csv"), encoding="cp936")
+        y=combine_data["label"].values
+        print("Counter(y):",Counter(y))
+        del combine_data["label"]
+        del combine_data["SFFS00"]  #
+        del combine_data["DWLB00"]  #单位类别
+        del combine_data["ICZTBH"]  #IC卡状态
 
-    train_x,test_x,train_y,test_y=train_test_split(x,y,test_size=0.6,random_state=33)
+        """类别解码"""
+        for li in combine_data.columns:
+            if combine_data[li].dtypes!="float64":
+                class_mapping={label:idx for idx,label in enumerate(np.unique(combine_data[li]))}
+                combine_data[li]=combine_data[li].map(class_mapping)
+        x=combine_data.values
+        return x,y
+
+    x,y=load_combine(root)
+    #x, y = load(root)
+    print("x.shape",x.shape)
+    train_x,test_x,train_y,test_y=train_test_split(x,y,test_size=0.3,random_state=33)
     clf=RandomForestClassifier()
     #clf =LogisticRegression()
     clf.fit(train_x,train_y)
@@ -119,5 +206,22 @@ def machion_learning():
     print("recall:",recall)
     print("precision:",precision)
 
+
+def read_bin():
+    root = "F:/projectfile/yibao_yishi_data/yibao_Feature_Engineering/data/"
+    combine_data = pd.read_csv(os.path.join(root, "combine_data.csv"), encoding="cp936")
+    del combine_data["label"]
+    index_columns=combine_data.columns
+    ranking = np.fromfile(root + 'ranking.bin', dtype='int32')
+    print(ranking)
+    permutation = ranking.argsort()
+    for i, ind in enumerate(permutation):
+        print(i, index_columns[ind])
+
+
+
 #load_data()
-machion_learning()
+#load_data_combine()
+#machion_learning()
+read_bin()
+

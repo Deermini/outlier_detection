@@ -1,10 +1,14 @@
 #!usr/bin/env python
 # -*- coding:utf-8 -*-
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import Counter
-import os
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score,recall_score,precision_score
+from sklearn.model_selection import train_test_split
 
 def figure_play(x,pos_y,nag_y):
     """绘制缺失值的比例图"""
@@ -150,11 +154,6 @@ def load_data_combine():
 
 def machion_learning():
     """利用机器学习算法来进行处理"""
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.metrics import accuracy_score,recall_score,precision_score
-    from sklearn.model_selection import train_test_split
-
     root="F:/projectfile/yibao_yishi_data/yibao_Feature_Engineering/data/"
     def load(root=root):
         pos_data=pd.read_csv(os.path.join(root,"pos_data.csv"),encoding="cp936")
@@ -189,11 +188,12 @@ def machion_learning():
                 class_mapping={label:idx for idx,label in enumerate(np.unique(combine_data[li]))}
                 combine_data[li]=combine_data[li].map(class_mapping)
         x=combine_data.values
-        return x,y
+        return x,y,combine_data.columns
 
-    x,y=load_combine(root)
+    x,y,columns_index=load_combine(root)
     #x, y = load(root)
     print("x.shape",x.shape)
+    read_bin(root,columns_index)
     train_x,test_x,train_y,test_y=train_test_split(x,y,test_size=0.3,random_state=33)
     clf=RandomForestClassifier()
     #clf =LogisticRegression()
@@ -206,22 +206,73 @@ def machion_learning():
     print("recall:",recall)
     print("precision:",precision)
 
-
-def read_bin():
-    root = "F:/projectfile/yibao_yishi_data/yibao_Feature_Engineering/data/"
-    combine_data = pd.read_csv(os.path.join(root, "combine_data.csv"), encoding="cp936")
-    del combine_data["label"]
-    index_columns=combine_data.columns
+def read_bin(root,index_columns):
     ranking = np.fromfile(root + 'ranking.bin', dtype='int32')
     print(ranking)
     permutation = ranking.argsort()
+    f=open(root+"ranking.txt","w")
     for i, ind in enumerate(permutation):
         print(i, index_columns[ind])
+        f.write(str(i)+":"+index_columns[ind]+"\n")
 
+def get_ranking_index(root):
+    f = open(root + "ranking.txt")
+    ranking_index=[]
+    for li in f.readlines():
+        li=li.strip().split(":")[1]
+        ranking_index.append(li)
+    return ranking_index
+
+def check_test(index=None):
+    """把两张表合起来进行处理"""
+    root = "F:/projectfile/yibao_yishi_data/yibao_Feature_Engineering/data/"
+    pos_data = pd.read_csv(os.path.join(root, "outlier/mzsf.csv"), encoding="cp936")
+    nag_data = pd.read_csv(os.path.join(root, "random_5K/mzsf_5k.csv"), encoding="cp936")
+    del pos_data['XMING1']
+    pos_data["label"] = pd.Series(1, index=pos_data.index)
+    nag_data['label'] = pd.Series(0, index=pos_data.index)
+
+    print(pos_data.shape)
+    print(nag_data.shape)
+    # print(pos_data['label'].dtypes)
+
+    combine_data = pd.DataFrame(pd.concat([pos_data, nag_data], axis=0, ignore_index=True))
+    print(combine_data.shape)
+
+    """抽取相应的列进行检查"""'ZHZFE0,GRZFE0,JJZFE0'
+    ranked_index = get_ranking_index(root)[:30]
+    #index=['LJTJJ1',"LJTXJ1","LJJTC0","LJFYB0","label"]
+    index=ranked_index+["label"]
+
+    data=combine_data[index].dropna()
+    print(data.shape)
+
+    """类别解码"""
+    for li in data.columns:
+        if data[li].dtypes != "float64":
+            class_mapping = {label: idx for idx, label in enumerate(np.unique(data[li]))}
+            data[li] = data[li].map(class_mapping)
+
+    x, y= data.ix[:,index[:-1]].values,data.ix[:,index[-1]].values
+    #x=x.reshape([None,1])
+    print("x.shape,y.shape", x.shape,y.shape)
+    train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=0.3, random_state=33)
+    clf = RandomForestClassifier()
+    #clf =LogisticRegression()
+    clf.fit(train_x, train_y)
+    pred = clf.predict(test_x)
+    acc = accuracy_score(test_y, pred)
+    recall = recall_score(test_y, pred)
+    precision = precision_score(test_y, pred)
+    print("acc:", acc)
+    print("recall:", recall)
+    print("precision:", precision)
 
 
 #load_data()
 #load_data_combine()
 #machion_learning()
-read_bin()
+check_test()
+
+
 

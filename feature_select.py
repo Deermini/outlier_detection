@@ -270,8 +270,8 @@ def check_test(index=None):
 
 
 #load_data()
-#load_data_combine()
-#machion_learning()
+load_data_combine()
+machion_learning()
 check_test()
 
 
